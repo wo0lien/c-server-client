@@ -7,3 +7,6 @@
 *.jpg
 *.jpeg
 *.png
+
+#ignore test txt files
+*.txt
