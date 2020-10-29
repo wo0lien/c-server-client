@@ -1,0 +1,9 @@
+#ignore files without extension
+*
+!*.*
+!/**/
+
+#ignore images
+*.jpg
+*.jpeg
+*.png
