@@ -3,6 +3,9 @@
 !*.*
 !/**/
 
+#ignore object files
+*.o
+
 #ignore images
 *.jpg
 *.jpeg
