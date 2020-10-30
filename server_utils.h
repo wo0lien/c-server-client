@@ -33,6 +33,6 @@ struct fragmented_packet
 struct connection_server_side *init_connection_server_side();
 int ping_server(struct connection_server_side *cs);
 int write_file_to_memory(char *buffer, int size, char *filename);
-int stopServer(struct connection_server_side *cs);
+int server_stop(struct connection_server_side *cs);
 
 #endif

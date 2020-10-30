@@ -21,7 +21,7 @@ int main() {
     
     ping_server(cs);
 
-    stopServer(cs);
+    server_stop(cs);
     
     return 0; 
 } 

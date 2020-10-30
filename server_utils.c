@@ -22,7 +22,7 @@ struct connection_server_side *init_connection_server_side()
     /* Creating socket file descriptor */
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
     {
-        perror("socket creation failed");
+        perror("socket creation failed.\n");
         exit(EXIT_FAILURE);
     }
 
@@ -38,7 +38,7 @@ struct connection_server_side *init_connection_server_side()
     if (bind(sockfd, (const struct sockaddr *)&servaddr,
              sizeof(servaddr)) < 0)
     {
-        perror("bind failed");
+        perror("bind failed.\n");
         exit(EXIT_FAILURE);
     }
 
@@ -70,7 +70,7 @@ int server_receive(struct connection_server_side *cs)
 
     if (n < 0)
     {
-        printf("Error while receiving packet");
+        printf("Error while receiving packet.\n");
         exit(-1);
     }
 
@@ -99,7 +99,7 @@ int server_send(struct connection_server_side *cs, char *buff, int size)
 
     if (s < 0)
     {
-        printf("Error while sending packet");
+        printf("Error while sending packet.\n");
         exit(-1);
     }
     return s;
@@ -157,12 +157,17 @@ int process_buffer(char **buffer, struct connection_server_side *cs)
     return 0;
 }
 
-int stopServer(struct connection_server_side *cs)
+/**
+ * Frees and socket close
+ */
+int server_stop(struct connection_server_side *cs)
 {
     /* Finishing connection */
     close(cs->sockfd);
 
     free(cs->incomplete_packets);
+
+    /* TODO: If statement */
     free(*cs->buffer);
     free(cs->buffer);
     free(cs);
