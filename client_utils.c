@@ -3,14 +3,18 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <unistd.h>
 #include <netinet/in.h>
 #include "protocole_utils.h"
 #include "client_utils.h"
 
+/**
+ * Return a struct of client connection
+ * Port param is in client_utils.h file
+ */
 int init_connection_client_side(struct connection_client_side *cc)
 {
     int sockfd;
-    char *buffer = malloc(MAXLINE+1);
     struct sockaddr_in servaddr;
 
     /* Creating socket file descriptor  */
@@ -28,30 +32,87 @@ int init_connection_client_side(struct connection_client_side *cc)
     servaddr.sin_addr.s_addr = INADDR_ANY;
 
     cc->sockfd = sockfd;
-    cc->buffer = &buffer;
-    cc->addr = servaddr;
+    cc->buffer = (char **)malloc(sizeof(char **));
+    cc->addr = &servaddr;
     cc->size = (size_t)sizeof(servaddr);
 
     return 0;
 }
 
+/**
+ * Send SIZE bytes of BUFF to client stored in CC
+ * Return the sendto return int 
+ */
+int client_send(struct connection_client_side *cc, char *buff, int size)
+{
+    /* Extracting CAN BE IMPROVED */
+    struct sockaddr_in addr = *cc->addr;
+
+    int s = sendto(cc->sockfd, (const char *)buff, (size_t)size,
+                   MSG_CONFIRM, (const struct sockaddr *)&addr, (socklen_t)sizeof(struct sockaddr));
+
+    if (s < 0)
+    {
+        printf("Error while sending packet.\n");
+        exit(-1);
+    }
+    return s;
+}
+
+/**
+ * Receive n bytes and store addr and buffer in CC
+ * Return n
+ */
+int client_receive(struct connection_client_side *cc)
+{
+    /* Extraction */
+    struct sockaddr_in addr = *cc->addr;
+    socklen_t len = (socklen_t)sizeof(*cc->addr);
+    char *b = (char *)malloc(sizeof(char) * MAXLINE);
+
+    int n;
+
+    n = recvfrom(cc->sockfd, b, (size_t)MAXLINE, 0, (struct sockaddr *)&addr, &len);
+
+    if (n < 0)
+    {
+        printf("Error while receiving packet\n");
+        exit(-1);
+    }
+
+    if (cc->buffer != NULL)
+    {
+        free(*cc->buffer);
+    }
+    cc->addr = &addr;
+    *cc->buffer = b;
+
+    return n;
+}
+
+/**
+ * Send a basic hello to the server and wait response
+ */
 int ping_client(struct connection_client_side *cc)
 {
-    char *hello = "Hello from client";
+    char *hello_c = "Hello from client";
 
-    sendto(cc->sockfd, (const char *)hello, strlen(hello),
-           MSG_CONFIRM, (const struct sockaddr *)&(cc->addr), cc->size);
+    client_send(cc, hello_c, strlen(hello_c));
+
     printf("Hello message sent.\n");
 
-    int n = recvfrom(cc->sockfd, *(cc->buffer), MAXLINE,
-                     MSG_WAITALL, (struct sockaddr *)&(cc->addr),
-                     &(cc->size));
-    *(cc->buffer)[n] = '\0';
+    client_receive(cc);
+
+    /* *(cc->buffer)[n] = '\0'; */
     printf("Server : %s\n", *(cc->buffer));
 
     return 0;
 }
 
+/**
+ * Load file FILENAME to the memory in RESULT
+ * DONT to malloc result before
+ */
 int load_file_to_memory(const char *filename, char **result)
 {
     int size = 0;
@@ -76,6 +137,10 @@ int load_file_to_memory(const char *filename, char **result)
     return size;
 }
 
+/**
+ * Send FILENAME through the CC connection
+ * Packet are fragmented if too long
+ */
 int send_file(struct connection_client_side *cc, char *filename)
 {
     /* Image loading*/
@@ -110,6 +175,23 @@ int send_file(struct connection_client_side *cc, char *filename)
         }
         num += MAXLINE - HEADER_LENGTH;
     }
+
+    return 0;
+}
+
+/**
+ * Frees and socket close
+ */
+int client_stop(struct connection_client_side *cc)
+{
+    /* Finishing connection */
+    close(cc->sockfd);
+
+
+    /* TODO: If statement */
+    free(*cc->buffer);
+    free(cc->buffer);
+    free(cc);
 
     return 0;
 }

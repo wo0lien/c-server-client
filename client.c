@@ -18,8 +18,7 @@ int main()
 
     ping_client(cc);
 
-    close(cc->sockfd);
-    free(cc);
+    client_stop(cc);
 
     return 0;
 }
