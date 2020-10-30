@@ -31,7 +31,7 @@ struct connection_server_side *init_connection_server_side()
 
     /* Filling server information */
     servaddr.sin_family = AF_INET; /* IPv4 */
-    servaddr.sin_addr.s_addr = INADDR_ANY;
+    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     servaddr.sin_port = htons(PORT);
 
     /* Bind the socket with the server address */
@@ -73,6 +73,8 @@ int server_receive(struct connection_server_side *cs)
         printf("Error while receiving packet.\n");
         exit(-1);
     }
+
+    b[n] = '\0';
 
     if (cs->buffer != NULL)
     {

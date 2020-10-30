@@ -5,6 +5,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <netinet/in.h>
+#include <errno.h>
 #include "protocole_utils.h"
 #include "client_utils.h"
 
@@ -12,8 +13,10 @@
  * Return a struct of client connection
  * Port param is in client_utils.h file
  */
-int init_connection_client_side(struct connection_client_side *cc)
+struct connection_client_side *init_connection_client_side()
 {
+    struct connection_client_side *cc = malloc(sizeof(struct connection_client_side));
+
     int sockfd;
     struct sockaddr_in servaddr;
 
@@ -29,14 +32,16 @@ int init_connection_client_side(struct connection_client_side *cc)
     /* Filling server information */
     servaddr.sin_family = AF_INET;
     servaddr.sin_port = htons(PORT);
-    servaddr.sin_addr.s_addr = INADDR_ANY;
+    servaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
     cc->sockfd = sockfd;
     cc->buffer = (char **)malloc(sizeof(char **));
     cc->addr = &servaddr;
     cc->size = (size_t)sizeof(servaddr);
 
-    return 0;
+    printf("addr (init) : %p\n", cc->addr);
+
+    return cc;
 }
 
 /**
@@ -48,12 +53,14 @@ int client_send(struct connection_client_side *cc, char *buff, int size)
     /* Extracting CAN BE IMPROVED */
     struct sockaddr_in addr = *cc->addr;
 
-    int s = sendto(cc->sockfd, (const char *)buff, (size_t)size,
-                   MSG_CONFIRM, (const struct sockaddr *)&addr, (socklen_t)sizeof(struct sockaddr));
+    printf("addr (client_send) : %p\n", cc->addr);
 
-    if (s < 0)
+    errno = 0;
+    int s = sendto(cc->sockfd, (char *)buff, (size_t)size,
+                   MSG_CONFIRM, (struct sockaddr *)&addr, (socklen_t)sizeof(struct sockaddr));
+    if (s < 0 && errno != 0)
     {
-        printf("Error while sending packet.\n");
+        fprintf(stderr, "Error while sending packet : %s\n", strerror(errno));
         exit(-1);
     }
     return s;
@@ -72,13 +79,18 @@ int client_receive(struct connection_client_side *cc)
 
     int n;
 
+    /*errno set to 0 to reset logs */
+    errno = 0;
     n = recvfrom(cc->sockfd, b, (size_t)MAXLINE, 0, (struct sockaddr *)&addr, &len);
 
-    if (n < 0)
+    /* Error handling */
+    if (n < 0 && errno != 0)
     {
-        printf("Error while receiving packet\n");
+        fprintf(stderr, "Error while receiving packet : %s\n", strerror(errno));
         exit(-1);
     }
+
+    b[n] = '\0';
 
     if (cc->buffer != NULL)
     {
@@ -143,6 +155,8 @@ int load_file_to_memory(const char *filename, char **result)
  */
 int send_file(struct connection_client_side *cc, char *filename)
 {
+
+    printf("addr (send_file) : %p\n", cc->addr);
     /* Image loading*/
     char *imageBuffer;
     int n = load_file_to_memory(filename, &imageBuffer);
@@ -151,30 +165,31 @@ int send_file(struct connection_client_side *cc, char *filename)
 
     /*Spliting and sending*/
     int num = 0;
-    struct header *h = malloc(sizeof(struct header));
-    char *temp_buffer = malloc(MAXLINE);
+    struct header *h = (struct header *)malloc(sizeof(struct header));
+    char *temp_buffer = (char *)malloc(MAXLINE);
     h->ack_segment_number = 0;
     h->last_flag = 0;
     while (num < n)
     {
+        printf("num :%d\n", num);
         h->segment_number = num;
-        if (n - num <= MAXLINE - HEADER_LENGTH)
+        if (n - num <= (MAXLINE - HEADER_LENGTH))
         {
             h->last_flag = 1;
             serialize_segment(&temp_buffer, (imageBuffer + num), n - num + HEADER_LENGTH, h);
-            sendto(cc->sockfd, temp_buffer, n - num + HEADER_LENGTH,
-                   MSG_CONFIRM, (const struct sockaddr *)&(cc->addr),
-                   cc->size);
+            client_send(cc, temp_buffer, n - num + HEADER_LENGTH);
         }
         else
         {
             serialize_segment(&temp_buffer, (imageBuffer + num), MAXLINE, h);
-            sendto(cc->sockfd, temp_buffer, MAXLINE,
-                   MSG_CONFIRM, (const struct sockaddr *)&(cc->addr),
-                   (cc->size));
+            client_send(cc, temp_buffer, MAXLINE);
         }
         num += MAXLINE - HEADER_LENGTH;
     }
+
+    free(h);
+    free(temp_buffer);
+    free(imageBuffer);
 
     return 0;
 }
@@ -186,7 +201,6 @@ int client_stop(struct connection_client_side *cc)
 {
     /* Finishing connection */
     close(cc->sockfd);
-
 
     /* TODO: If statement */
     free(*cc->buffer);

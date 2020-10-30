@@ -13,10 +13,10 @@
 /* Driver code */
 int main()
 {
-    struct connection_client_side *cc = malloc(sizeof(struct connection_client_side));
-    init_connection_client_side(cc);
+    struct connection_client_side *cc = init_connection_client_side();
 
-    ping_client(cc);
+    /* ping_client(cc); */
+    send_file(cc, "cat.jpeg");
 
     client_stop(cc);
 

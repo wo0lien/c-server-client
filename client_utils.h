@@ -14,7 +14,7 @@ struct connection_client_side
     socklen_t size;
 };
 
-int init_connection_client_side(struct connection_client_side *cc);
+struct connection_client_side *init_connection_client_side();
 int load_file_to_memory(const char *filename, char **result);
 int ping_client(struct connection_client_side *cc);
 int client_send(struct connection_client_side *cc, char *buff, int size);
