@@ -18,7 +18,14 @@ struct connection_client_side *init_connection_client_side()
     struct connection_client_side *cc = malloc(sizeof(struct connection_client_side));
 
     int sockfd;
-    struct sockaddr_in servaddr;
+    struct sockaddr_in *servaddr = (struct sockaddr_in *)malloc(sizeof(struct sockaddr_in));
+    if (servaddr == NULL)
+    {
+        printf("Error while allocation memory\n");
+        exit(-1);
+    }
+
+    printf("sockaddr in p : %p\n", servaddr);
 
     /* Creating socket file descriptor  */
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
@@ -27,17 +34,15 @@ struct connection_client_side *init_connection_client_side()
         exit(EXIT_FAILURE);
     }
 
-    memset(&servaddr, 0, sizeof(servaddr));
-
     /* Filling server information */
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_port = htons(PORT);
-    servaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    servaddr->sin_family = AF_INET;
+    servaddr->sin_port = htons(PORT);
+    servaddr->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
     cc->sockfd = sockfd;
     cc->buffer = (char **)malloc(sizeof(char **));
-    cc->addr = &servaddr;
-    cc->size = (size_t)sizeof(servaddr);
+    cc->addr = servaddr;
+    cc->size = (size_t)sizeof(struct sockaddr_in);
 
     printf("addr (init) : %p\n", cc->addr);
 
