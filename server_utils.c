@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 #include "protocole_utils.h"
 #include "server_utils.h"
 
@@ -16,8 +17,8 @@ struct connection_server_side *init_connection_server_side()
     struct connection_server_side *conn = malloc(sizeof(struct connection_server_side));
 
     int sockfd;
-    struct sockaddr_in servaddr;
-    struct sockaddr_in cliaddr;
+    struct sockaddr_in *servaddr  = (struct sockaddr_in*) malloc(sizeof(struct sockaddr_in));
+    struct sockaddr_in *cliaddr = (struct sockaddr_in*) malloc(sizeof(struct sockaddr_in));
 
     /* Creating socket file descriptor */
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
@@ -26,17 +27,14 @@ struct connection_server_side *init_connection_server_side()
         exit(EXIT_FAILURE);
     }
 
-    memset(&servaddr, 0, sizeof(servaddr));
-    memset(&cliaddr, 0, sizeof(cliaddr));
-
     /* Filling server information */
-    servaddr.sin_family = AF_INET; /* IPv4 */
-    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    servaddr.sin_port = htons(PORT);
+    servaddr->sin_family = AF_INET; /* IPv4 */
+    servaddr->sin_addr.s_addr = htonl(INADDR_ANY);
+    servaddr->sin_port = htons(PORT);
 
     /* Bind the socket with the server address */
-    if (bind(sockfd, (const struct sockaddr *)&servaddr,
-             sizeof(servaddr)) < 0)
+    if (bind(sockfd, (const struct sockaddr *)servaddr,
+             sizeof(struct sockaddr_in)) < 0)
     {
         perror("bind failed.\n");
         exit(EXIT_FAILURE);
@@ -44,11 +42,13 @@ struct connection_server_side *init_connection_server_side()
 
     /* Filling the connection struct */
     conn->sockfd = sockfd;
-    conn->servaddr = &servaddr;
-    conn->cliaddr = &cliaddr;
+    conn->servaddr = servaddr;
+    conn->cliaddr = cliaddr;
     conn->buffer = (char **)malloc(sizeof(char **));
     conn->incomplete_packets = (struct fragmented_packet **)malloc(sizeof(struct fragmented_packet *));
     conn->incomplete_packets_number = 0;
+
+    printf("cliaddr sin_family (init) : %i\n", conn->cliaddr->sin_family);
 
     return conn;
 }
@@ -60,17 +60,17 @@ struct connection_server_side *init_connection_server_side()
 int server_receive(struct connection_server_side *cs)
 {
     /* Extraction */
-    struct sockaddr_in cliaddr = *cs->cliaddr;
     socklen_t len = (socklen_t)sizeof(*cs->cliaddr);
     char *b = (char *)malloc(sizeof(char) * MAXLINE);
 
     int n;
+    errno = 0;
 
-    n = recvfrom(cs->sockfd, b, (size_t)MAXLINE, 0, (struct sockaddr *)&cliaddr, &len);
+    n = recvfrom(cs->sockfd, b, (size_t)MAXLINE, 0, (struct sockaddr *)cs->cliaddr, &len);
 
-    if (n < 0)
+    if (n < 0 && errno != 0)
     {
-        printf("Error while receiving packet.\n");
+        printf("Error while receiving msg: %s\n", strerror(errno));
         exit(-1);
     }
 
@@ -80,7 +80,6 @@ int server_receive(struct connection_server_side *cs)
     {
         free(*cs->buffer);
     }
-    cs->cliaddr = &cliaddr;
     *cs->buffer = b;
 
     return n;
@@ -93,15 +92,15 @@ int server_receive(struct connection_server_side *cs)
 int server_send(struct connection_server_side *cs, char *buff, int size)
 {
 
-    /* Extracting CAN BE IMPROVED */
-    struct sockaddr_in cliaddr = *cs->cliaddr;
+    printf("cliaddr sin_family (server_send) : %i\n", cs->cliaddr->sin_family);
 
+    errno = 0;
     int s = sendto(cs->sockfd, (const char *)buff, (size_t)size,
-                   MSG_CONFIRM, (const struct sockaddr *)&cliaddr, (socklen_t)sizeof(struct sockaddr));
+                   MSG_CONFIRM, (const struct sockaddr *)cs->cliaddr, (socklen_t)sizeof(struct sockaddr_in));
 
-    if (s < 0)
+    if (s < 0 && errno != 0)
     {
-        printf("Error while sending packet.\n");
+        printf("Error while sending packet: %s\n", strerror(errno));
         exit(-1);
     }
     return s;
@@ -116,11 +115,8 @@ int ping_server(struct connection_server_side *cs)
     char *hello_s = "Hello from the server";
 
     server_receive(cs);
-
     printf("Client : %s\n", *cs->buffer);
-
     server_send(cs, hello_s, strlen(hello_s));
-
     printf("Hello message sent.\n");
 
     return 0;
@@ -133,7 +129,6 @@ int ping_server(struct connection_server_side *cs)
 int write_file_to_memory(char *buffer, int size, char *filename)
 {
     FILE *file = fopen(filename, "wb");
-
     for (int i = 0; i < size; i++)
     {
         fprintf(file, "%c", (char)*(buffer + i));

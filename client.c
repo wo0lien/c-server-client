@@ -15,8 +15,8 @@ int main()
 {
     struct connection_client_side *cc = init_connection_client_side();
 
-    /* ping_client(cc); */
-    send_file(cc, "cat.jpeg");
+    ping_client(cc);
+    /* send_file(cc, "cat.jpeg"); */
 
     client_stop(cc);
 
