@@ -11,10 +11,10 @@
  * Return a struct of server connection
  * Port param is in server_utils.h file
  */
-struct connection_server_side *init_connection_server_side()
+css_t *init_connection_server_side()
 {
 
-    struct connection_server_side *conn = malloc(sizeof(struct connection_server_side));
+    css_t *conn = malloc(sizeof(css_t));
 
     int sockfd;
     struct sockaddr_in *servaddr  = (struct sockaddr_in*) malloc(sizeof(struct sockaddr_in));
@@ -57,7 +57,7 @@ struct connection_server_side *init_connection_server_side()
  * Receive n bytes and store cliaddr and buffer in CS
  * Return n
  */
-int server_receive(struct connection_server_side *cs)
+int server_receive(css_t *cs)
 {
     /* Extraction */
     socklen_t len = (socklen_t)sizeof(*cs->cliaddr);
@@ -89,7 +89,7 @@ int server_receive(struct connection_server_side *cs)
  * Send SIZE bytes of BUFF to client stored in CS
  * Return the sendto return int 
  */
-int server_send(struct connection_server_side *cs, char *buff, int size)
+int server_send(css_t *cs, char *buff, int size)
 {
 
     printf("cliaddr sin_family (server_send) : %i\n", cs->cliaddr->sin_family);
@@ -109,7 +109,7 @@ int server_send(struct connection_server_side *cs, char *buff, int size)
 /**
  * Send a basic hello to the client in response to a message
  */
-int ping_server(struct connection_server_side *cs)
+int ping_server(css_t *cs)
 {
     /* Vars */
     char *hello_s = "Hello from the server";
@@ -140,7 +140,7 @@ int write_file_to_memory(char *buffer, int size, char *filename)
 /**
  * Process BUFFER to store it into CS packets
  */
-int process_buffer(char **buffer, struct connection_server_side *cs)
+int process_buffer(char **buffer, css_t *cs)
 {
     /* Deserialize incoming segment */
     struct segment *s = malloc(sizeof(struct segment));
@@ -157,7 +157,7 @@ int process_buffer(char **buffer, struct connection_server_side *cs)
 /**
  * Frees and socket close
  */
-int server_stop(struct connection_server_side *cs)
+int server_stop(css_t *cs)
 {
     /* Finishing connection */
     close(cs->sockfd);

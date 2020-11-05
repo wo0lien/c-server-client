@@ -8,7 +8,7 @@
 /**
  * All vars to describe a connection
  */
-struct connection_server_side
+typedef struct connection_server_side
 {
   int sockfd;
   struct sockaddr_in *servaddr;
@@ -16,23 +16,23 @@ struct connection_server_side
   uint8_t incomplete_packets_number;
   char **buffer;
   struct fragmented_packet **incomplete_packets;
-};
+} css_t;
 
 /**
  * Fragments of packet waiting for reassembling are stored
  * with this format
  */
-struct fragmented_packet
+typedef struct fragmented_packet
 {
   uint32_t packet_id;
   uint32_t max;
   uint32_t count;
   struct segment **fragments;
-};
+} fragpack_t;
 
-struct connection_server_side *init_connection_server_side();
-int ping_server(struct connection_server_side *cs);
+css_t *init_connection_server_side();
+int ping_server(css_t *cs);
 int write_file_to_memory(char *buffer, int size, char *filename);
-int server_stop(struct connection_server_side *cs);
+int server_stop(css_t *cs);
 
 #endif

@@ -13,9 +13,9 @@
  * Return a struct of client connection
  * Port param is in client_utils.h file
  */
-struct connection_client_side *init_connection_client_side()
+ccs_t *init_connection_client_side()
 {
-    struct connection_client_side *cc = malloc(sizeof(struct connection_client_side));
+    ccs_t *cc = malloc(sizeof(ccs_t));
 
     int sockfd;
     struct sockaddr_in *servaddr = (struct sockaddr_in *)malloc(sizeof(struct sockaddr_in));
@@ -53,7 +53,7 @@ struct connection_client_side *init_connection_client_side()
  * Send SIZE bytes of BUFF to client stored in CC
  * Return the sendto return int 
  */
-int client_send(struct connection_client_side *cc, char *buff, int size)
+int client_send(ccs_t *cc, char *buff, int size)
 {
     /* Extracting CAN BE IMPROVED */
     struct sockaddr_in addr = *cc->addr;
@@ -75,7 +75,7 @@ int client_send(struct connection_client_side *cc, char *buff, int size)
  * Receive n bytes and store addr and buffer in CC
  * Return n
  */
-int client_receive(struct connection_client_side *cc)
+int client_receive(ccs_t *cc)
 {
     /* Extraction */
     struct sockaddr_in addr = *cc->addr;
@@ -110,7 +110,7 @@ int client_receive(struct connection_client_side *cc)
 /**
  * Send a basic hello to the server and wait response
  */
-int ping_client(struct connection_client_side *cc)
+int ping_client(ccs_t *cc)
 {
     char *hello_c = "Hello from client";
 
@@ -158,7 +158,7 @@ int load_file_to_memory(const char *filename, char **result)
  * Send FILENAME through the CC connection
  * Packet are fragmented if too long
  */
-int send_file(struct connection_client_side *cc, char *filename)
+int send_file(ccs_t *cc, char *filename)
 {
 
     printf("addr (send_file) : %p\n", cc->addr);
@@ -202,7 +202,7 @@ int send_file(struct connection_client_side *cc, char *filename)
 /**
  * Frees and socket close
  */
-int client_stop(struct connection_client_side *cc)
+int client_stop(ccs_t *cc)
 {
     /* Finishing connection */
     close(cc->sockfd);

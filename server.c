@@ -17,7 +17,7 @@
 /* Driver code */ 
 int main() { 
 
-    struct connection_server_side *cs = init_connection_server_side();
+    css_t *cs = init_connection_server_side();
     
     ping_server(cs);
 

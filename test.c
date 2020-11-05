@@ -21,7 +21,7 @@ int main()
     printf("Cat file has been writen to memory\n");
 
     /* Init connection_client_side to server */
-    struct connection_client_side* cc = malloc(sizeof(struct connection_client_side));
+    ccs_t* cc = malloc(sizeof(ccs_t));
     init_connection_client_side(cc);
 
     /* Testing sending file from the client to the server */
