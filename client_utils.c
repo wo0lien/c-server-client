@@ -58,8 +58,6 @@ int client_send(ccs_t *cc, char *buff, int size)
     /* Extracting CAN BE IMPROVED */
     struct sockaddr_in addr = *cc->addr;
 
-    printf("addr (client_send) : %p\n", cc->addr);
-
     errno = 0;
     int s = sendto(cc->sockfd, (char *)buff, (size_t)size,
                    MSG_CONFIRM, (struct sockaddr *)&addr, (socklen_t)sizeof(struct sockaddr));
@@ -112,9 +110,29 @@ int client_receive(ccs_t *cc)
  */
 int ping_client(ccs_t *cc)
 {
-    char *hello_c = "Hello from client";
+    char *temp_buffer = (char *)malloc(MAXLINE);
+    if (temp_buffer == NULL)
+    {
+        printf("Error while allocating temporary buffer");
+        exit(-1);
+    }
 
-    client_send(cc, hello_c, strlen(hello_c));
+    char *hello_c = "Hello from client.";
+    struct header *h = (struct header *)malloc(sizeof(struct header));
+    if (h == NULL)
+    {
+        printf("Error while allocating header.\n");
+        exit(-1);
+    }
+
+    h->ack_segment_number = 0;
+    h->frag_flag = 0;
+    h->last_flag = 0;
+    h->segment_number = 0;
+
+    serialize_segment(&temp_buffer, hello_c, MAXLINE, h);
+
+    client_send(cc, temp_buffer, MAXLINE);
 
     printf("Hello message sent.\n");
 
@@ -123,6 +141,8 @@ int ping_client(ccs_t *cc)
     /* *(cc->buffer)[n] = '\0'; */
     printf("Server : %s\n", *(cc->buffer));
 
+    free(temp_buffer);
+    free(h);
     return 0;
 }
 
@@ -169,27 +189,42 @@ int send_file(ccs_t *cc, char *filename)
     fflush(stdout);
 
     /*Spliting and sending*/
-    int num = 0;
+    int progression = 0;
+    int seg_num = 0;
     struct header *h = (struct header *)malloc(sizeof(struct header));
+    if (h == NULL)
+    {
+        printf("Error while allocating header.\n");
+        exit(-1);
+    }
+
     char *temp_buffer = (char *)malloc(MAXLINE);
     h->ack_segment_number = 0;
+    h->frag_flag = 1;
     h->last_flag = 0;
-    while (num < n)
+    h->payload_size = MAXLINE - HEADER_LENGTH;
+    while (progression < n)
     {
-        printf("num :%d\n", num);
-        h->segment_number = num;
-        if (n - num <= (MAXLINE - HEADER_LENGTH))
+        printf("num :%d\n", seg_num);
+        printf("progression: %d\n", progression);
+        printf("n-prog: %d\n", n-progression);
+        h->segment_number = seg_num;
+        if (n - progression <= (MAXLINE - HEADER_LENGTH))
         {
             h->last_flag = 1;
-            serialize_segment(&temp_buffer, (imageBuffer + num), n - num + HEADER_LENGTH, h);
-            client_send(cc, temp_buffer, n - num + HEADER_LENGTH);
+            h->payload_size = n - progression;
+            serialize_segment(&temp_buffer, (imageBuffer + progression), n - progression + HEADER_LENGTH, h);
+            client_send(cc, temp_buffer, n - progression + HEADER_LENGTH);
         }
         else
         {
-            serialize_segment(&temp_buffer, (imageBuffer + num), MAXLINE, h);
+            serialize_segment(&temp_buffer, (imageBuffer + progression), MAXLINE, h);
             client_send(cc, temp_buffer, MAXLINE);
         }
-        num += MAXLINE - HEADER_LENGTH;
+
+        printf("payload_size : %d\n", h->payload_size);
+        progression += MAXLINE - HEADER_LENGTH;
+        seg_num += 1;
     }
 
     free(h);

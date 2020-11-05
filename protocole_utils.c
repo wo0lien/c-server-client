@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <arpa/inet.h>
 
 uint32_t deserialize_uint32(char *c, int p)
@@ -24,6 +25,12 @@ uint16_t deserialize_uint16(char *c, int p)
   return u;
 }
 
+int serialize_uint16(uint16_t i, int p, char *c)
+{
+  memcpy((c+p), &i, 2);
+  return 0;
+}
+
 /**
  * Renvoie un pointer vers la structure parsée du header du protocole
  */
@@ -31,10 +38,11 @@ int deserialize_header(struct header *h, char *segment)
 {
   h->segment_number = ntohl(deserialize_uint32(segment, 0));
   h->ack_segment_number = ntohl(deserialize_uint32(segment, 4));
+  h->payload_size = ntohs(deserialize_uint16(segment, 8));
   
   /* Flags */
-  h->last_flag = (segment[8] & 0b00000001);
-  h->frag_flag = ((segment[8] & 0b00000010) >> 1);
+  h->last_flag = (segment[10] & 0b00000001);
+  h->frag_flag = ((segment[10] & 0b00000010) >> 1);
 
   return 0;
 }
@@ -45,9 +53,10 @@ int deserialize_header(struct header *h, char *segment)
 
 int serialize_header(char **header, struct header *h)
 {
-  serialize_uint32(h->segment_number, 0, *header);
-  serialize_uint32(h->ack_segment_number, 4, *header);
-  (*header)[8] = (uint8_t)(h->last_flag + 2 * h->frag_flag);
+  serialize_uint32(htonl(h->segment_number), 0, *header);
+  serialize_uint32(htonl(h->ack_segment_number), 4, *header);
+  serialize_uint16(htons(h->payload_size), 8, *header);
+  (*header)[10] = (uint8_t)(h->last_flag + 2 * h->frag_flag);
   return 0;
 }
 
@@ -58,6 +67,7 @@ int serialize_header(char **header, struct header *h)
 
 int deserialize_segment(struct segment *s, char *segment)
 {
+  printf("header addr (deserialize_segment) : %p\n", s->header);
   deserialize_header(s->header, segment);
   memcpy(s->payload, (segment + HEADER_LENGTH), MAXLINE - HEADER_LENGTH);
   return 0;

@@ -17,7 +17,7 @@ int main()
 
     /* Testing char writing to file */
     /* Passing */
-    write_file_to_memory(buffer, n, "new_cat.jpeg");
+    write_file_from_memory(buffer, n, "new_cat.jpeg");
     printf("Cat file has been writen to memory\n");
 
     /* Init connection_client_side to server */

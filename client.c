@@ -15,8 +15,8 @@ int main()
 {
     ccs_t *cc = init_connection_client_side();
 
-    ping_client(cc);
-    /* send_file(cc, "cat.jpeg"); */
+    /* ping_client(cc); */
+    send_file(cc, "test_2026.txt");
 
     client_stop(cc);
 

@@ -24,15 +24,20 @@ typedef struct connection_server_side
  */
 typedef struct fragmented_packet
 {
-  uint32_t packet_id;
-  uint32_t max;
-  uint32_t count;
-  struct segment **fragments;
+  uint32_t packet_id;          /* The packet ID - not implemented yet */
+  uint32_t max;                /* Frag id max atm*/
+  uint32_t count;              /* Received fragments counter */
+  uint8_t final_size;          /* 1/0 if the last flag has been received */
+  uint32_t payload_total_size; /* The total payload size atm - big enough ? */ 
+  struct segment **fragments;  /* Fragments of the message */
 } fragpack_t;
 
 css_t *init_connection_server_side();
 int ping_server(css_t *cs);
-int write_file_to_memory(char *buffer, int size, char *filename);
+int server_receive(css_t *cs);
+int server_send(css_t *cs, char *buff, int size);
+int process_buffer(char **buffer, css_t *cs);
+int write_file_from_memory(char *buffer, int size, char *filename);
 int server_stop(css_t *cs);
 
 #endif

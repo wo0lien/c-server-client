@@ -1,27 +1,34 @@
 
-/* Server side implementation of UDP client-server model */ 
-#include <stdio.h> 
-#include <stdlib.h> 
-#include <unistd.h> 
-#include <string.h> 
-#include <sys/types.h> 
-#include <sys/socket.h> 
-#include <arpa/inet.h> 
-#include <netinet/in.h> 
+/* Server side implementation of UDP client-server model */
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include "server_utils.h"
 #include "protocole_utils.h"
-  
-#define PORT 8080 
-#define MAXLINE 1024 
-  
-/* Driver code */ 
-int main() { 
+
+#define PORT 8080
+#define MAXLINE 1024
+
+/* Driver code */
+int main()
+{
 
     css_t *cs = init_connection_server_side();
-    
-    ping_server(cs);
+    int next = 1;
+
+    /* ping_server(cs); */
+    while (next)
+    {
+        server_receive(cs);
+        next = process_buffer(cs->buffer, cs);
+    }
 
     server_stop(cs);
-    
-    return 0; 
-} 
+
+    return 0;
+}
