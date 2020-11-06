@@ -18,16 +18,12 @@
 int main()
 {
 
-    css_t *cs = init_connection_server_side();
-    int next = 1;
+    css_t *cs = server_init_connection();
 
-    /* ping_server(cs); */
-    while (next)
-    {
-        server_receive(cs);
-        next = process_buffer(cs->buffer, cs);
-    }
-
+    server_receive(cs);
+    /* client_ping(cc); */
+    server_send_file(cs, "test_2026.txt");
+    
     server_stop(cs);
 
     return 0;

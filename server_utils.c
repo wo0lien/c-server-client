@@ -11,7 +11,7 @@
  * Return a struct of server connection
  * Port param is in server_utils.h file
  */
-css_t *init_connection_server_side()
+css_t *server_init_connection()
 {
 
     css_t *conn = malloc(sizeof(css_t));
@@ -45,10 +45,9 @@ css_t *init_connection_server_side()
     conn->servaddr = servaddr;
     conn->cliaddr = cliaddr;
     conn->buffer = (char **)malloc(sizeof(char **));
+
     conn->incomplete_packets = (struct fragmented_packet **)malloc(sizeof(struct fragmented_packet *));
     conn->incomplete_packets_number = 0;
-
-    printf("cliaddr sin_family (init) : %i\n", conn->cliaddr->sin_family);
 
     return conn;
 }
@@ -105,37 +104,12 @@ int server_send(css_t *cs, char *buff, int size)
 }
 
 /**
- * Send a basic hello to the client in response to a message
+ * To use when the packet is fragemented
+ * Store S in cc and return
+ * 1 if all the fragments has been received
+ * 0 if not
  */
-int ping_server(css_t *cs)
-{
-    /* Vars */
-    char *hello_s = "Hello from the server";
-
-    server_receive(cs);
-    process_buffer(cs->buffer, cs);
-    server_send(cs, hello_s, strlen(hello_s));
-    printf("Hello message sent.\n");
-
-    return 0;
-}
-
-/**
- * Write SIZE bytes of BUFFER in FILENAME
- * Return 0
- */
-int write_file_from_memory(char *buffer, int size, char *filename)
-{
-    FILE *file = fopen(filename, "wb");
-    for (int i = 0; i < size; i++)
-    {
-        fprintf(file, "%c", (char)*(buffer + i));
-    }
-    fclose(file);
-    return 0;
-}
-
-int store_fragment(struct segment *s, css_t *cs)
+int server_store_fragment(struct segment *s, css_t *cs)
 {
     /* The current code does not allow multiple segmented packets at the same time
     and fragments needs to be received in the right order */
@@ -210,9 +184,9 @@ int store_fragment(struct segment *s, css_t *cs)
 }
 
 /**
- * Process BUFFER to store it into CS packets
+ * Process BUFFER to store it into cc packets
  */
-int process_buffer(char **buffer, css_t *cs)
+int server_process_buffer(char **buffer, css_t *cs)
 {
     /* Deserialize incoming segment */
     struct segment *s = malloc(sizeof(struct segment));
@@ -235,7 +209,7 @@ int process_buffer(char **buffer, css_t *cs)
         printf("Segmentation detected.\n");
         /* printf("Message : %s\n", s->payload); */
 
-        int sr = store_fragment(s, cs);
+        int sr = server_store_fragment(s, cs);
         printf("store returns : %d.\n", sr);
 
         if (sr == 1)
@@ -273,14 +247,114 @@ int process_buffer(char **buffer, css_t *cs)
 }
 
 /**
+ * Send a basic hello to the client in response to a message
+ */
+int server_ping(css_t *cs)
+{
+    /* Vars */
+    char *hello_s = "Hello from the server";
+
+    server_receive(cs);
+    server_process_buffer(cs->buffer, cs);
+    server_send(cs, hello_s, strlen(hello_s));
+    printf("Hello message sent.\n");
+
+    return 0;
+}
+
+/**
+ * Load file FILENAME to the memory in RESULT
+ * DONT to malloc result before
+ */
+int load_file_to_memory(const char *filename, char **result)
+{
+    int size = 0;
+    FILE *f = fopen(filename, "rb");
+    if (f == NULL)
+    {
+        *result = NULL;
+        return -1; /* -1 means file opening fail */
+    }
+    fseek(f, 0, SEEK_END);
+    size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    *result = malloc(size + 1);
+    if ((size_t)size != fread(*result, (size_t)1, size, f))
+    {
+        free(result);
+        return -2; /* -2 means file reading fail */
+    }
+    fclose(f);
+
+    (*result)[size] = 0;
+    return size;
+}
+
+/**
+ * Send FILENAME through the CC connection
+ * Packet are fragmented if too long
+ */
+int server_send_file(css_t *cs, char *filename)
+{
+    /* Image loading*/
+    char *imageBuffer;
+    int n = load_file_to_memory(filename, &imageBuffer);
+    printf("Loaded file size is: %i\n", n);
+    fflush(stdout);
+
+    /*Spliting and sending*/
+    int progression = 0;
+    int seg_num = 0;
+    struct header *h = (struct header *)malloc(sizeof(struct header));
+    if (h == NULL)
+    {
+        printf("Error while allocating header.\n");
+        exit(-1);
+    }
+
+    char *temp_buffer = (char *)malloc(MAXLINE);
+    h->ack_segment_number = 0;
+    h->frag_flag = 1;
+    h->last_flag = 0;
+    h->payload_size = MAXLINE - HEADER_LENGTH;
+    while (progression < n)
+    {
+        printf("num :%d\n", seg_num);
+        printf("progression: %d\n", progression);
+        printf("n-prog: %d\n", n - progression);
+        h->segment_number = seg_num;
+        if (n - progression <= (MAXLINE - HEADER_LENGTH))
+        {
+            h->last_flag = 1;
+            h->payload_size = n - progression;
+            serialize_segment(&temp_buffer, (imageBuffer + progression), n - progression + HEADER_LENGTH, h);
+            server_send(cs, temp_buffer, n - progression + HEADER_LENGTH);
+        }
+        else
+        {
+            serialize_segment(&temp_buffer, (imageBuffer + progression), MAXLINE, h);
+            server_send(cs, temp_buffer, MAXLINE);
+        }
+
+        printf("payload_size : %d\n", h->payload_size);
+        progression += MAXLINE - HEADER_LENGTH;
+        seg_num += 1;
+    }
+
+    free(h);
+    free(temp_buffer);
+    free(imageBuffer);
+
+    return 0;
+}
+
+/**
  * Frees and socket close
  */
 int server_stop(css_t *cs)
 {
     /* Finishing connection */
     close(cs->sockfd);
-
-    free(cs->incomplete_packets);
 
     /* TODO: If statement */
     free(*cs->buffer);

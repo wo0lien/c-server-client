@@ -13,7 +13,7 @@
  * Return a struct of client connection
  * Port param is in client_utils.h file
  */
-ccs_t *init_connection_client_side()
+ccs_t *client_init_connection()
 {
     ccs_t *cc = malloc(sizeof(ccs_t));
 
@@ -43,6 +43,9 @@ ccs_t *init_connection_client_side()
     cc->buffer = (char **)malloc(sizeof(char **));
     cc->addr = servaddr;
     cc->size = (size_t)sizeof(struct sockaddr_in);
+
+    cc->incomplete_packets = (struct fragmented_packet **)malloc(sizeof(struct fragmented_packet *));
+    cc->incomplete_packets_number = 0;
 
     printf("addr (init) : %p\n", cc->addr);
 
@@ -108,7 +111,7 @@ int client_receive(ccs_t *cc)
 /**
  * Send a basic hello to the server and wait response
  */
-int ping_client(ccs_t *cc)
+int client_ping(ccs_t *cc)
 {
     char *temp_buffer = (char *)malloc(MAXLINE);
     if (temp_buffer == NULL)
@@ -147,90 +150,160 @@ int ping_client(ccs_t *cc)
 }
 
 /**
- * Load file FILENAME to the memory in RESULT
- * DONT to malloc result before
+ * Write SIZE bytes of BUFFER in FILENAME
+ * Return 0
  */
-int load_file_to_memory(const char *filename, char **result)
+int write_file_from_memory(char *buffer, int size, char *filename)
 {
-    int size = 0;
-    FILE *f = fopen(filename, "rb");
-    if (f == NULL)
+    FILE *file = fopen(filename, "wb");
+    for (int i = 0; i < size; i++)
     {
-        *result = NULL;
-        return -1; /* -1 means file opening fail */
+        fprintf(file, "%c", (char)*(buffer + i));
     }
-    fseek(f, 0, SEEK_END);
-    size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    *result = malloc(size + 1);
-    if ((size_t)size != fread(*result, (size_t)1, size, f))
-    {
-        free(result);
-        return -2; /* -2 means file reading fail */
-    }
-    fclose(f);
-
-    (*result)[size] = 0;
-    return size;
+    fclose(file);
+    return 0;
 }
 
 /**
- * Send FILENAME through the CC connection
- * Packet are fragmented if too long
+ * To use when the packet is fragemented
+ * Store S in cc and return
+ * 1 if all the fragments has been received
+ * 0 if not
  */
-int send_file(ccs_t *cc, char *filename)
+int client_store_fragment(struct segment *s, ccs_t *cc)
 {
+    /* The current code does not allow multiple segmented packets at the same time
+    and fragments needs to be received in the right order */
 
-    printf("addr (send_file) : %p\n", cc->addr);
-    /* Image loading*/
-    char *imageBuffer;
-    int n = load_file_to_memory(filename, &imageBuffer);
-    printf("Loaded file size is: %i\n", n);
-    fflush(stdout);
-
-    /*Spliting and sending*/
-    int progression = 0;
-    int seg_num = 0;
-    struct header *h = (struct header *)malloc(sizeof(struct header));
-    if (h == NULL)
+    /* Alloc memory for the segment */
+    if (cc->incomplete_packets_number == 0)
     {
-        printf("Error while allocating header.\n");
+        (*cc->incomplete_packets) = (struct fragmented_packet *)malloc(sizeof(struct fragmented_packet));
+        if ((*cc->incomplete_packets) == NULL)
+        {
+            printf("Error while allocating cip memory.\n");
+            exit(-1);
+        }
+
+        (*cc->incomplete_packets)->count = 0;
+        (*cc->incomplete_packets)->final_size = 0;
+        (*cc->incomplete_packets)->max = 10;
+        (*cc->incomplete_packets)->packet_id = 0;
+        (*cc->incomplete_packets)->payload_total_size = 0;
+        (*cc->incomplete_packets)->fragments = (struct segment **)malloc(sizeof(void *) * 10);
+        if ((*cc->incomplete_packets)->fragments == NULL)
+        {
+            printf("Error while allocating memory for fragments.\n");
+            exit(-1);
+        }
+
+        cc->incomplete_packets_number = 1;
+    }
+
+    /* Passing var for readeability cip = current_incomplete_packet*/
+    struct fragmented_packet *cip = *cc->incomplete_packets;
+
+    printf("cip vs real : %p / %p.\n", cip, *cc->incomplete_packets);
+
+    /** Increment counters */
+    cip->count++;
+    cip->payload_total_size += s->header->payload_size;
+
+    printf("num : %d\n", s->header->segment_number);
+
+    /* Realloc space if necessary */
+    if (s->header->segment_number >= cip->max)
+    {
+        cip->max = s->header->segment_number + 10;
+        cip->fragments = realloc(cip->fragments, sizeof(void *) * cip->max);
+        if (cip->fragments == NULL)
+        {
+            printf("Error while realloc\n");
+            exit(-1);
+        }
+    }
+
+    /* Store s */
+    *(cip->fragments + s->header->segment_number) = s;
+
+    /* If this is the last fragment */
+    if (s->header->last_flag == 1)
+    {
+        cip->final_size = 1;
+        cip->max = s->header->segment_number + 1;
+        printf("Last frag has been received ! max: %d count: %d.\n", cip->max, cip->count);
+    }
+
+    if (cip->final_size == 1 && cip->max == cip->count)
+    {
+        /* Recompose packet */
+        printf("Packet is complete, need to implent refrag now arf...\n");
+        return 1;
+    }
+
+    return 0;
+}
+
+/**
+ * Process BUFFER to store it into cc packets
+ */
+int client_process_buffer(char **buffer, ccs_t *cc)
+{
+    /* Deserialize incoming segment */
+    struct segment *s = malloc(sizeof(struct segment));
+    if (s == NULL)
+    {
+        printf("Error while allocating the segment struct\n");
+        exit(-1);
+    }
+    s->header = (struct header *)malloc(sizeof(struct header));
+    if (s->header == NULL)
+    {
+        printf("Error while allocating the segment header struct");
         exit(-1);
     }
 
-    char *temp_buffer = (char *)malloc(MAXLINE);
-    h->ack_segment_number = 0;
-    h->frag_flag = 1;
-    h->last_flag = 0;
-    h->payload_size = MAXLINE - HEADER_LENGTH;
-    while (progression < n)
+    deserialize_segment(s, *buffer);
+
+    if (s->header->frag_flag == 1)
     {
-        printf("num :%d\n", seg_num);
-        printf("progression: %d\n", progression);
-        printf("n-prog: %d\n", n-progression);
-        h->segment_number = seg_num;
-        if (n - progression <= (MAXLINE - HEADER_LENGTH))
+        printf("Segmentation detected.\n");
+        /* printf("Message : %s\n", s->payload); */
+
+        int sr = client_store_fragment(s, cc);
+        printf("store returns : %d.\n", sr);
+
+        if (sr == 1)
         {
-            h->last_flag = 1;
-            h->payload_size = n - progression;
-            serialize_segment(&temp_buffer, (imageBuffer + progression), n - progression + HEADER_LENGTH, h);
-            client_send(cc, temp_buffer, n - progression + HEADER_LENGTH);
-        }
-        else
-        {
-            serialize_segment(&temp_buffer, (imageBuffer + progression), MAXLINE, h);
-            client_send(cc, temp_buffer, MAXLINE);
+            /* debug recompose initial and write to file NEED TO BE PUT IN SEPARATE FUNCTIONS FOR PRODUCTION */
+            char *recomposed = (char *)malloc((*cc->incomplete_packets)->payload_total_size);
+
+            printf("payload_total_size: %d\n", (*cc->incomplete_packets)->payload_total_size);
+            if (recomposed == NULL)
+            {
+                printf("Error while malloc.\n");
+                exit(-1);
+            }
+
+            struct fragmented_packet *cfp = *(cc->incomplete_packets);
+            for (int i = 0; i < (int)cfp->count; i++)
+            {
+                printf("Iterate for memcpy: %d\n", i);
+                /* memcpy((recomposed + i * (MAXLINE - HEADER_LENGTH)), ((*(cfp->fragments) + i)->payload), ((*(cfp->fragments) + i)->header->payload_size)); */
+                memcpy((recomposed + i * (MAXLINE - HEADER_LENGTH)), ((*(cfp->fragments + i))->payload), ((*(cfp->fragments + i))->header->payload_size));
+            }
+
+            write_file_from_memory(recomposed, (*cc->incomplete_packets)->payload_total_size, "test_2026.jpeg");
         }
 
-        printf("payload_size : %d\n", h->payload_size);
-        progression += MAXLINE - HEADER_LENGTH;
-        seg_num += 1;
+        if (s->header->last_flag == 1)
+        {
+            printf("end of message detected.\n");
+            return 0;
+        }
+        return 1;
     }
-
-    free(h);
-    free(temp_buffer);
-    free(imageBuffer);
-
+    printf("No segmentation detected.\n");
     return 0;
 }
 

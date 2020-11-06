@@ -13,10 +13,19 @@
 /* Driver code */
 int main()
 {
-    ccs_t *cc = init_connection_client_side();
+    ccs_t *cc = client_init_connection();
 
-    /* ping_client(cc); */
-    send_file(cc, "test_2026.txt");
+    int next = 1;
+
+    char *test = "SYN";
+    client_send(cc, test, 3);
+
+    /* server_ping(cs); */
+    while (next)
+    {
+        client_receive(cc);
+        next = client_process_buffer(cc->buffer, cc);
+    }
 
     client_stop(cc);
 
