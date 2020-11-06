@@ -25,8 +25,6 @@ ccs_t *client_init_connection()
         exit(-1);
     }
 
-    printf("sockaddr in p : %p\n", servaddr);
-
     /* Creating socket file descriptor  */
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
     {
@@ -47,8 +45,6 @@ ccs_t *client_init_connection()
     cc->incomplete_packets = (struct fragmented_packet **)malloc(sizeof(struct fragmented_packet *));
     cc->incomplete_packets_number = 0;
 
-    printf("addr (init) : %p\n", cc->addr);
-
     return cc;
 }
 
@@ -58,12 +54,10 @@ ccs_t *client_init_connection()
  */
 int client_send(ccs_t *cc, char *buff, int size)
 {
-    /* Extracting CAN BE IMPROVED */
-    struct sockaddr_in addr = *cc->addr;
 
     errno = 0;
     int s = sendto(cc->sockfd, (char *)buff, (size_t)size,
-                   MSG_CONFIRM, (struct sockaddr *)&addr, (socklen_t)sizeof(struct sockaddr));
+                   MSG_CONFIRM, (struct sockaddr *)cc->addr, (socklen_t)sizeof(struct sockaddr));
     if (s < 0 && errno != 0)
     {
         fprintf(stderr, "Error while sending packet : %s\n", strerror(errno));
@@ -132,6 +126,7 @@ int client_ping(ccs_t *cc)
     h->frag_flag = 0;
     h->last_flag = 0;
     h->segment_number = 0;
+    h->fragment_number = 0;
 
     serialize_segment(&temp_buffer, hello_c, MAXLINE, h);
 
@@ -203,18 +198,14 @@ int client_store_fragment(struct segment *s, ccs_t *cc)
     /* Passing var for readeability cip = current_incomplete_packet*/
     struct fragmented_packet *cip = *cc->incomplete_packets;
 
-    printf("cip vs real : %p / %p.\n", cip, *cc->incomplete_packets);
-
     /** Increment counters */
     cip->count++;
     cip->payload_total_size += s->header->payload_size;
 
-    printf("num : %d\n", s->header->segment_number);
-
     /* Realloc space if necessary */
-    if (s->header->segment_number >= cip->max)
+    if (s->header->fragment_number >= cip->max)
     {
-        cip->max = s->header->segment_number + 10;
+        cip->max = s->header->fragment_number + 10;
         cip->fragments = realloc(cip->fragments, sizeof(void *) * cip->max);
         if (cip->fragments == NULL)
         {
@@ -224,24 +215,47 @@ int client_store_fragment(struct segment *s, ccs_t *cc)
     }
 
     /* Store s */
-    *(cip->fragments + s->header->segment_number) = s;
+    *(cip->fragments + s->header->fragment_number) = s;
 
     /* If this is the last fragment */
     if (s->header->last_flag == 1)
     {
         cip->final_size = 1;
-        cip->max = s->header->segment_number + 1;
-        printf("Last frag has been received ! max: %d count: %d.\n", cip->max, cip->count);
+        cip->max = s->header->fragment_number + 1;
     }
 
+    printf("max - count: %d\n",cip->max - cip->count);
     if (cip->final_size == 1 && cip->max == cip->count)
     {
         /* Recompose packet */
-        printf("Packet is complete, need to implent refrag now arf...\n");
         return 1;
     }
 
     return 0;
+}
+
+/**
+ * Recompose the packet in CS with PACKET_ID and return the buffer address
+ * TODO use packet_id
+ **/
+char *client_recompose_packet_payload(ccs_t *cc)
+{
+    char *payload = (char *)malloc((*cc->incomplete_packets)->payload_total_size);
+
+    printf("payload_total_size: %d\n", (*cc->incomplete_packets)->payload_total_size);
+    if (payload == NULL)
+    {
+        printf("Error while malloc.\n");
+        exit(-1);
+    }
+
+    struct fragmented_packet *cfp = *(cc->incomplete_packets);
+    for (int i = 0; i < (int)cfp->count; i++)
+    {
+        memcpy((payload + i * (MAXLINE - HEADER_LENGTH)), ((*(cfp->fragments + i))->payload), ((*(cfp->fragments + i))->header->payload_size));
+    }
+
+    return payload;
 }
 
 /**
@@ -275,24 +289,7 @@ int client_process_buffer(char **buffer, ccs_t *cc)
 
         if (sr == 1)
         {
-            /* debug recompose initial and write to file NEED TO BE PUT IN SEPARATE FUNCTIONS FOR PRODUCTION */
-            char *recomposed = (char *)malloc((*cc->incomplete_packets)->payload_total_size);
-
-            printf("payload_total_size: %d\n", (*cc->incomplete_packets)->payload_total_size);
-            if (recomposed == NULL)
-            {
-                printf("Error while malloc.\n");
-                exit(-1);
-            }
-
-            struct fragmented_packet *cfp = *(cc->incomplete_packets);
-            for (int i = 0; i < (int)cfp->count; i++)
-            {
-                printf("Iterate for memcpy: %d\n", i);
-                /* memcpy((recomposed + i * (MAXLINE - HEADER_LENGTH)), ((*(cfp->fragments) + i)->payload), ((*(cfp->fragments) + i)->header->payload_size)); */
-                memcpy((recomposed + i * (MAXLINE - HEADER_LENGTH)), ((*(cfp->fragments + i))->payload), ((*(cfp->fragments + i))->header->payload_size));
-            }
-
+            char *recomposed = client_recompose_packet_payload(cc);
             write_file_from_memory(recomposed, (*cc->incomplete_packets)->payload_total_size, "test_2026.jpeg");
         }
 
@@ -315,9 +312,18 @@ int client_stop(ccs_t *cc)
     /* Finishing connection */
     close(cc->sockfd);
 
-    /* TODO: If statement */
-    free(*cc->buffer);
-    free(cc->buffer);
+    if (cc->buffer != NULL)
+    {
+        free(*cc->buffer);
+        free(cc->buffer);
+    }
+
+    if (cc->incomplete_packets != NULL)
+    {
+        free(*cc->incomplete_packets);
+        free(cc->incomplete_packets);
+    }
+
     free(cc);
 
     return 0;

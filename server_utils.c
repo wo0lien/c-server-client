@@ -88,9 +88,6 @@ int server_receive(css_t *cs)
  */
 int server_send(css_t *cs, char *buff, int size)
 {
-
-    printf("cliaddr sin_family (server_send) : %i\n", cs->cliaddr->sin_family);
-
     errno = 0;
     int s = sendto(cs->sockfd, (const char *)buff, (size_t)size,
                    MSG_CONFIRM, (const struct sockaddr *)cs->cliaddr, (socklen_t)sizeof(struct sockaddr_in));
@@ -148,12 +145,12 @@ int server_store_fragment(struct segment *s, css_t *cs)
     cip->count++;
     cip->payload_total_size += s->header->payload_size;
 
-    printf("num : %d\n", s->header->segment_number);
+    printf("num : %d\n", s->header->fragment_number);
 
     /* Realloc space if necessary */
-    if (s->header->segment_number >= cip->max)
+    if (s->header->fragment_number >= cip->max)
     {
-        cip->max = s->header->segment_number + 10;
+        cip->max = s->header->fragment_number + 10;
         cip->fragments = realloc(cip->fragments, sizeof(void *) * cip->max);
         if (cip->fragments == NULL)
         {
@@ -163,24 +160,46 @@ int server_store_fragment(struct segment *s, css_t *cs)
     }
 
     /* Store s */
-    *(cip->fragments + s->header->segment_number) = s;
+    *(cip->fragments + s->header->fragment_number) = s;
 
     /* If this is the last fragment */
     if (s->header->last_flag == 1)
     {
         cip->final_size = 1;
-        cip->max = s->header->segment_number + 1;
-        printf("Last frag has been received ! max: %d count: %d.\n", cip->max, cip->count);
+        cip->max = s->header->fragment_number + 1;
     }
 
     if (cip->final_size == 1 && cip->max == cip->count)
     {
         /* Recompose packet */
-        printf("Packet is complete, need to implent refrag now arf...\n");
         return 1;
     }
 
     return 0;
+}
+
+/**
+ * Recompose the packet in CS with PACKET_ID and return the buffer address
+ * TODO use packet_id
+ **/
+char *recompose_packet_payload(css_t *cs)
+{
+    char *payload = (char *)malloc((*cs->incomplete_packets)->payload_total_size);
+
+    printf("payload_total_size: %d\n", (*cs->incomplete_packets)->payload_total_size);
+    if (payload == NULL)
+    {
+        printf("Error while malloc.\n");
+        exit(-1);
+    }
+
+    struct fragmented_packet *cfp = *(cs->incomplete_packets);
+    for (int i = 0; i < (int)cfp->count; i++)
+    {
+        memcpy((payload + i * (MAXLINE - HEADER_LENGTH)), ((*(cfp->fragments + i))->payload), ((*(cfp->fragments + i))->header->payload_size));
+    }
+
+    return payload;
 }
 
 /**
@@ -214,24 +233,7 @@ int server_process_buffer(char **buffer, css_t *cs)
 
         if (sr == 1)
         {
-            /* debug recompose initial and write to file NEED TO BE PUT IN SEPARATE FUNCTIONS FOR PRODUCTION */
-            char *recomposed = (char *)malloc((*cs->incomplete_packets)->payload_total_size);
-
-            printf("payload_total_size: %d\n", (*cs->incomplete_packets)->payload_total_size);
-            if (recomposed == NULL)
-            {
-                printf("Error while malloc.\n");
-                exit(-1);
-            }
-
-            struct fragmented_packet *cfp = *(cs->incomplete_packets);
-            for (int i = 0; i < (int)cfp->count; i++)
-            {
-                printf("Iterate for memcpy: %d\n", i);
-                /* memcpy((recomposed + i * (MAXLINE - HEADER_LENGTH)), ((*(cfp->fragments) + i)->payload), ((*(cfp->fragments) + i)->header->payload_size)); */
-                memcpy((recomposed + i * (MAXLINE - HEADER_LENGTH)), ((*(cfp->fragments + i))->payload), ((*(cfp->fragments + i))->header->payload_size));
-            }
-
+            char *recomposed = recompose_packet_payload(cs);
             write_file_from_memory(recomposed, (*cs->incomplete_packets)->payload_total_size, "test_2026.jpeg");
         }
 
@@ -299,7 +301,6 @@ int server_send_file(css_t *cs, char *filename)
     /* Image loading*/
     char *imageBuffer;
     int n = load_file_to_memory(filename, &imageBuffer);
-    printf("Loaded file size is: %i\n", n);
     fflush(stdout);
 
     /*Spliting and sending*/
@@ -322,7 +323,7 @@ int server_send_file(css_t *cs, char *filename)
         printf("num :%d\n", seg_num);
         printf("progression: %d\n", progression);
         printf("n-prog: %d\n", n - progression);
-        h->segment_number = seg_num;
+        h->fragment_number = seg_num;
         if (n - progression <= (MAXLINE - HEADER_LENGTH))
         {
             h->last_flag = 1;
@@ -335,8 +336,6 @@ int server_send_file(css_t *cs, char *filename)
             serialize_segment(&temp_buffer, (imageBuffer + progression), MAXLINE, h);
             server_send(cs, temp_buffer, MAXLINE);
         }
-
-        printf("payload_size : %d\n", h->payload_size);
         progression += MAXLINE - HEADER_LENGTH;
         seg_num += 1;
     }
@@ -357,8 +356,20 @@ int server_stop(css_t *cs)
     close(cs->sockfd);
 
     /* TODO: If statement */
-    free(*cs->buffer);
-    free(cs->buffer);
+    if (cs->buffer != NULL)
+    {
+        free(*cs->buffer);
+        free(cs->buffer);
+    }
+    if (cs->incomplete_packets != NULL)
+    {
+        free(*cs->incomplete_packets);
+        free(cs->incomplete_packets);
+    }
+
+    free(cs->servaddr);
+    free(cs->cliaddr);
+
     free(cs);
     return 0;
 }

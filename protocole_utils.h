@@ -3,16 +3,17 @@
 #ifndef PROTOCOLE_UTILS_H
 #define PROTOCOLE_UTILS_H
 
-#define HEADER_LENGTH 11
+#define HEADER_LENGTH 9
 #define MAXLINE 1024
 
 /* The protocole header format and the associated parser */
 
 struct header
 {
-    uint32_t segment_number;     /* Segment number */
-    uint32_t ack_segment_number; /* Ack number */
+    uint16_t segment_number;     /* Segment number */
+    uint16_t ack_segment_number; /* Ack number */
     uint16_t payload_size;       /* The payload size in bytes */
+    uint16_t fragment_number;    /* The fragment number inside segment number if the packet is fragmented */
     uint8_t last_flag;           /* This is the last segment of the segmented message*/
     uint8_t frag_flag;           /* The is a part of segmented packet */
 };

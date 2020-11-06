@@ -38,13 +38,14 @@ int serialize_uint16(uint16_t i, int p, char *c)
  */
 int deserialize_header(struct header *h, char *segment)
 {
-    h->segment_number = ntohl(deserialize_uint32(segment, 0));
-    h->ack_segment_number = ntohl(deserialize_uint32(segment, 4));
-    h->payload_size = ntohs(deserialize_uint16(segment, 8));
+    h->segment_number = ntohs(deserialize_uint16(segment, 0));
+    h->ack_segment_number = ntohs(deserialize_uint16(segment, 2));
+    h->payload_size = ntohs(deserialize_uint16(segment, 4));
+    h->fragment_number = ntohs(deserialize_uint16(segment, 6));
 
     /* Flags */
-    h->last_flag = (segment[10] & 0b00000001);
-    h->frag_flag = ((segment[10] & 0b00000010) >> 1);
+    h->last_flag = (segment[8] & 0b00000001);
+    h->frag_flag = ((segment[8] & 0b00000010) >> 1);
 
     return 0;
 }
@@ -55,10 +56,11 @@ int deserialize_header(struct header *h, char *segment)
 
 int serialize_header(char **header, struct header *h)
 {
-    serialize_uint32(htonl(h->segment_number), 0, *header);
-    serialize_uint32(htonl(h->ack_segment_number), 4, *header);
-    serialize_uint16(htons(h->payload_size), 8, *header);
-    (*header)[10] = (uint8_t)(h->last_flag + 2 * h->frag_flag);
+    serialize_uint16(htons(h->segment_number), 0, *header);
+    serialize_uint16(htons(h->ack_segment_number), 2, *header);
+    serialize_uint16(htons(h->payload_size), 4, *header);
+    serialize_uint16(htons(h->fragment_number), 6, *header);
+    (*header)[8] = (uint8_t)(h->last_flag + 2 * h->frag_flag);
     return 0;
 }
 
@@ -69,7 +71,6 @@ int serialize_header(char **header, struct header *h)
 
 int deserialize_segment(struct segment *s, char *segment)
 {
-    printf("header addr (deserialize_segment) : %p\n", s->header);
     deserialize_header(s->header, segment);
     memcpy(s->payload, (segment + HEADER_LENGTH), MAXLINE - HEADER_LENGTH);
     return 0;
@@ -82,8 +83,14 @@ int deserialize_segment(struct segment *s, char *segment)
 int serialize_segment(char **segment, char *payload, int segment_size, struct header *h)
 {
     char *char_header = malloc(HEADER_LENGTH);
+    if (char_header == NULL)
+    {
+        printf("Error while malloc on char_header.\n");
+        exit(-1);
+    }
     serialize_header(&char_header, h);
     memcpy(*segment, char_header, HEADER_LENGTH);
     memcpy((*segment + HEADER_LENGTH), payload, (segment_size - HEADER_LENGTH));
+    free(char_header);
     return 0;
 }
