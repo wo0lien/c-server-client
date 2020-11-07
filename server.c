@@ -18,13 +18,24 @@
 int main()
 {
 
-    css_t *cs = server_init_connection();
+    conn_t *cs = protocol_init_connection(PORT, INADDR_LOOPBACK, AF_INET, 1);
 
-    server_receive(cs);
-    /* client_ping(cc); */
-    server_send_file(cs, "test_2026.txt");
+    int *l=(int *)malloc(sizeof(int));
+    char *data = protocol_receive(cs, &l);
+
+    data[*l] = '\0';
+
+    char* char_file = NULL;
+
+    int n = load_file_to_memory(data, &char_file);
+
+    protocol_send(cs, &char_file, n);
     
-    server_stop(cs);
+    protocol_stop(cs);
+
+    free(l);
+    free(data);
+    free(char_file);
 
     return 0;
 }

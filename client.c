@@ -13,21 +13,21 @@
 /* Driver code */
 int main()
 {
-    ccs_t *cc = client_init_connection();
+    conn_t *cc = protocol_init_connection(PORT, INADDR_LOOPBACK, AF_INET, 2);
 
-    int next = 1;
+    char *data = "cat.jpeg";
 
-    char *test = "SYN";
-    client_send(cc, test, 3);
+    protocol_send(cc, &data, strlen(data));
 
-    /* server_ping(cs); */
-    while (next)
-    {
-        client_receive(cc);
-        next = client_process_buffer(cc->buffer, cc);
-    }
+    int *l = (int *)malloc(sizeof(int));
 
-    client_stop(cc);
+    char *file = protocol_receive(cc, &l);
+
+    write_file_from_memory(file, *l, ("received_file.jpeg"));
+
+    protocol_stop(cc);
+
+    free(l);
 
     return 0;
 }
