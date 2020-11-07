@@ -28,6 +28,7 @@ int main()
     protocol_stop(cc);
 
     free(l);
+    free(file);
 
     return 0;
 }

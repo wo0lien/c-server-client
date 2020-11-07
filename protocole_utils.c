@@ -125,13 +125,14 @@ int protocol_store_fragment(conn_t *co, seg_t *s)
             printf("Error while reallocating memory.\n");
             exit(-1);
         }
+
         /* WARNING Not sure of the line bellow uhu*/
         (co->ips)[co->ips_number] = (fragpack_t *)malloc(sizeof(fragpack_t));
         if ((co->ips)[co->ips_number] == NULL)
         {
             printf("Error while allocating.\n");
             exit(-1);
-        }
+        } 
 
         /*Filling the thing*/
         (*co->ips + co->ips_number)->count = 0;
@@ -506,13 +507,14 @@ char *protocol_receive(conn_t *co, int **data_length)
         for (int i = 0; i < (int)cfp->count; i++)
         {
             memcpy((data + i * (MAXLINE - HEADER_LENGTH)), ((*(cfp->fragments + i))->payload), ((*(cfp->fragments + i))->header->payload_size));
+            free((*(cfp->fragments + i))->header);
+            free((*(cfp->fragments + i)));
         }
 
         /* Decrement counter */
         co->ips_number--;
 
         /* Free related mem */
-        free(*cfp->fragments);
         free(cfp->fragments);
         free(cfp);
     }
@@ -520,12 +522,13 @@ char *protocol_receive(conn_t *co, int **data_length)
     {
         /* No fragmentation */
         memcpy(data, s->payload, **data_length);
+        free(s->header);
+        free(s);
     }
 
     /* Frees */
-    free(s->header);
-    free(s);
     free(h);
+    free(buffer);
 
     /* Returning the final array */
     return data;
