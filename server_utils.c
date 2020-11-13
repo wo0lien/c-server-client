@@ -19,7 +19,7 @@ int server_minimal_receive(conn_t *cs, char **buffer)
     int n;
     errno = 0;
 
-    n = recvfrom(cs->sockfd, buffer, (size_t)MAXLINE, 0, (struct sockaddr *)cs->destaddr, &len);
+    n = recvfrom(cs->sockfd, *buffer, (size_t)MAXLINE, 0, (struct sockaddr *)cs->destaddr, &len);
 
     if (n < 0 && errno != 0)
     {
@@ -52,10 +52,10 @@ int server_minimal_send(conn_t *cs, char *buff, int size)
  * Load file FILENAME to the memory in RESULT
  * DONT malloc result before
  */
-int load_file_to_memory(const char *filename, char **result)
+int load_file_to_memory(char *filename, char **result)
 {
     int size = 0;
-    FILE *f = fopen(filename, "rb");
+    FILE *f = fopen((const char *) filename, "rb");
     if (f == NULL)
     {
         *result = NULL;

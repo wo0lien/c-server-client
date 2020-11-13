@@ -7,6 +7,6 @@
 
 int server_minimal_receive(conn_t *cs, char **buffer);
 int server_minimal_send(conn_t *cs, char *buff, int size);
-int load_file_to_memory(const char *filename, char **result);
+int load_file_to_memory(char *filename, char **result);
 
 #endif

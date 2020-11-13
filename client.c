@@ -23,7 +23,7 @@ int main()
 
     char *file = protocol_receive(cc, &l);
 
-    write_file_from_memory(file, *l, ("received_file.jpeg"));
+    write_file_from_memory(file, *l, "received_file.jpeg");
 
     protocol_stop(cc);
 

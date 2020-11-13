@@ -11,6 +11,22 @@
 #include "server_utils.h"
 #include "client_utils.h"
 
+/**
+ * Used to initialize header_t data to 0
+ */
+int initialize_header(header_t *h)
+{
+    h->packet_id = 0;
+    h->segment_id = 0;
+    h->ack_segment_id = 0;
+    h->payload_size = 0;
+    h->fragment_id = 0;
+    h->last_flag = 0;
+    h->frag_flag = 0;
+
+    return 0;
+}
+
 uint32_t deserialize_uint32(char *c, int p)
 {
     uint32_t u = 0;
@@ -76,7 +92,7 @@ int serialize_header(char **header, struct header *h)
 int deserialize_segment(struct segment *s, char *segment)
 {
     deserialize_header(s->header, segment);
-    /* JUST READDRESS */
+    /* JUST READDRESS here would certainly be better*/
     memcpy(s->payload, (segment + HEADER_LENGTH), s->header->payload_size);
     return 0;
 }
@@ -119,7 +135,7 @@ int protocol_store_fragment(conn_t *co, seg_t *s)
     {
         /* Nothing found create it ! */
 
-        co->ips = realloc(co->ips, sizeof(void *) * co->ips_number + 1);
+        co->ips = realloc(co->ips, sizeof(void *) * (co->ips_number + 1));
         if (co->ips == NULL)
         {
             printf("Error while reallocating memory.\n");
@@ -132,7 +148,7 @@ int protocol_store_fragment(conn_t *co, seg_t *s)
         {
             printf("Error while allocating.\n");
             exit(-1);
-        } 
+        }
 
         /*Filling the thing*/
         (*co->ips + co->ips_number)->count = 0;
@@ -170,7 +186,7 @@ int protocol_store_fragment(conn_t *co, seg_t *s)
         }
     }
 
-    /* Store s */
+    /* Store s by value so we can readress it after ? */
     *(cip->fragments + s->header->fragment_id) = s;
 
     return pos;
@@ -183,6 +199,11 @@ conn_t *protocol_init_connection(int port, in_addr_t host, int family, int type)
 {
 
     conn_t *conn = malloc(sizeof(conn_t));
+    if (conn == NULL)
+    {
+        printf("Malloc failed.\n");
+        exit(EXIT_FAILURE);
+    }
 
     int sockfd;
     struct sockaddr_in *selfaddr = (struct sockaddr_in *)malloc(sizeof(struct sockaddr_in));
@@ -239,6 +260,8 @@ conn_t *protocol_init_connection(int port, in_addr_t host, int family, int type)
     conn->ack_id = 0;
     conn->packet_id = 0;
 
+    conn->type = type;
+
     return conn;
 }
 
@@ -282,6 +305,7 @@ int protocol_send(conn_t *co, char **data, int length)
         printf("Error while allocating.\n");
         exit(-1);
     }
+    initialize_header(s->header);
 
     header_t *h = (header_t *)malloc(sizeof(header_t));
     if (h == NULL)
@@ -289,6 +313,7 @@ int protocol_send(conn_t *co, char **data, int length)
         printf("Error while malloc.\n");
         exit(-1);
     }
+    initialize_header(h);
 
     char *buffer = (char *)malloc(MAXLINE);
     if (buffer == NULL)
@@ -401,13 +426,15 @@ char *protocol_receive(conn_t *co, int **data_length)
         printf("Error while malloc.\n");
         exit(-1);
     }
-    char *buffer = (char *)malloc(MAXLINE);
+    initialize_header(h);
+    char *buffer = (char *)malloc(sizeof(char) * MAXLINE);
     if (buffer == NULL)
     {
         printf("Error while allocating.\n");
         exit(-1);
     }
-    seg_t *s;
+
+    seg_t *s = NULL;
 
     /* Vars */
     int ips_pos = -1;
@@ -415,7 +442,7 @@ char *protocol_receive(conn_t *co, int **data_length)
     /* Loop on receive while the packet is not full */
     do
     {
-        /* Allocating struct on every loop */
+        /* Reallocate every time */
         s = (seg_t *)malloc(sizeof(seg_t));
         if (s == NULL)
         {
@@ -428,7 +455,7 @@ char *protocol_receive(conn_t *co, int **data_length)
             printf("Error while allocating.\n");
             exit(-1);
         }
-
+        initialize_header(s->header);
         /* Receive segment(s) */
         if (co->type == 1)
         {
@@ -455,7 +482,7 @@ char *protocol_receive(conn_t *co, int **data_length)
         h->last_flag = 0;
         h->frag_flag = 0;
 
-        /* Is a "" really 0 bytes long ? */
+        /* Is a "" really 0 bytes long ? No it's one byte long*/
         serialize_segment(&buffer, "", HEADER_LENGTH, h);
 
         if (co->type == 1)
@@ -531,5 +558,6 @@ char *protocol_receive(conn_t *co, int **data_length)
     free(buffer);
 
     /* Returning the final array */
+
     return data;
 }
